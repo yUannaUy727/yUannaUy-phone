@@ -1,0 +1,41 @@
+/* Status preset folders: scoped to manager/editor and the folder picker. */
+.sb-folder-crumbs{display:flex;align-items:center;gap:7px;min-height:34px;overflow-x:auto;white-space:nowrap;margin:0 0 10px;color:#8b949e;font:13px/1.4 system-ui}
+.sb-folder-button{border:0;background:transparent;color:#657482;font:inherit;padding:7px 4px;cursor:pointer;flex-shrink:0}
+.sb-folder-separator{color:#b7bec5}.sb-folder-crumbs button{max-width:180px;overflow:hidden;text-overflow:ellipsis}
+.sb-folder-search{display:block;box-sizing:border-box;width:100%;min-width:0;min-height:38px;margin:0 0 14px;padding:9px 12px;border:1px solid #e8ebee;border-radius:13px;background:#f6f7f9;color:#343a40;outline:none;font:13px/1.4 system-ui}
+.sb-folder-search:focus{border-color:#b9c7d2}.sb-folder-search::placeholder{color:#a0a8b0}
+#status-bar-preset-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px}
+#status-bar-preset-list .preset-card{display:flex;flex-direction:column;align-items:stretch;min-width:0;padding:13px;border:1px solid #e7ebef;border-radius:16px;background:#ffffffdc;box-shadow:0 3px 14px #33445506;gap:8px}
+.sb-folder-card-main{display:flex;align-items:center;gap:11px;min-width:0;width:100%;padding:2px 0;border:0;background:transparent;color:#343a40;font:14px/1.5 system-ui;text-align:left;cursor:pointer}
+.sb-folder-card-main .preset-info-col{display:flex;flex-direction:column;min-width:0;gap:4px;flex:1}
+.sb-folder-card-main .preset-name{display:block;overflow-wrap:anywhere;font-weight:500}
+.sb-folder-card-main .preset-desc{display:block;max-height:36px;overflow:hidden;color:#929ba4;font:11px/1.6 system-ui;overflow-wrap:anywhere}
+.sb-folder-icon{display:inline-flex;align-items:center;justify-content:center;flex:0 0 30px;color:#8c9eac}.sb-folder-icon svg{width:26px;height:26px}
+#status-bar-preset-list .preset-actions-col{display:flex;flex-direction:row;justify-content:flex-end;gap:10px;border-top:1px solid #eef0f3;padding-top:6px}
+#status-bar-preset-list .sb-folder-text-action{border:0;background:transparent;color:#8a959f;font:11px/1.4 system-ui;padding:5px 3px;min-width:0;cursor:pointer}
+#status-bar-preset-list .sb-folder-text-action.delete{color:#ad8b8b}
+.sb-folder-empty{grid-column:1/-1;text-align:center;padding:25px 10px;color:#a2aab2;font:13px/1.6 system-ui}
+#sb-preset-folder{box-sizing:border-box;width:100%;padding:10px 12px;border:1px solid #e5e9ed;border-radius:10px;background:#fff;color:#44515c;font:13px/1.5 system-ui}
+.sb-folder-settings-select{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:9px 12px;border:1px solid #e7ebef;border-radius:10px;background:#fff;color:#657582;font:13px/1.4 system-ui;text-align:left;cursor:pointer}
+.sb-folder-overlay{position:fixed;inset:0;z-index:33000;display:flex;align-items:center;justify-content:center;box-sizing:border-box;padding:22px;background:#303c4938;backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px)}
+.sb-folder-dialog{box-sizing:border-box;display:flex;flex-direction:column;width:100%;max-width:420px;max-height:78dvh;min-height:260px;padding:18px;border:1px solid #ffffffb3;border-radius:22px;background:#fcfdfff5;box-shadow:0 12px 50px #2233441a;color:#35414b;font:13px/1.5 system-ui;overflow:hidden}
+.sb-folder-dialog-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}.sb-folder-dialog-head strong{font-size:16px;font-weight:500}.sb-folder-dialog-head button{font-size:23px;line-height:1;width:30px;height:30px;border-radius:50%;background:#eef1f5;padding:0}
+.sb-folder-dialog .sb-folder-search{flex-shrink:0;margin-bottom:6px}.sb-folder-dialog .sb-folder-crumbs{flex-shrink:0}
+.sb-folder-browser-list{flex:1;min-height:100px;overflow-y:auto;overscroll-behavior:contain}
+.sb-folder-browser-row{display:flex;align-items:center;gap:10px;box-sizing:border-box;width:100%;min-height:53px;padding:12px 5px;border:0;border-bottom:1px solid #edf0f3;background:transparent;color:inherit;text-align:left;font:inherit;cursor:pointer}
+.sb-folder-label{flex:1;min-width:0;overflow-wrap:anywhere;display:flex;flex-direction:column;gap:3px}.sb-folder-label small{color:#99a2ab;font-size:11px}.sb-folder-row-tail{color:#9aa6b0;flex-shrink:0;font-size:12px}
+.sb-folder-dialog-footer{display:flex;justify-content:flex-end;gap:15px;flex-shrink:0;padding-top:14px;margin-top:5px;border-top:1px solid #eef0f3}
+.sb-folder-primary{padding:8px 15px;border:0;border-radius:12px;background:#dde8f0;color:#556b7d;font:inherit;cursor:pointer}.sb-folder-primary:disabled{opacity:.45;cursor:default}
+.sb-folder-browser-row:active,.sb-folder-card-main:active{opacity:.65}
+body.uwu-night-active .sb-folder-dialog{background:#252932f5;border-color:#454b55;color:#dce2e8}
+body.uwu-night-active :is(.sb-folder-search,.sb-folder-settings-select,#sb-preset-folder){background:#292e37;border-color:#454b55;color:#dce2e8}
+body.uwu-night-active :is(.sb-folder-card-main,.sb-folder-button){color:#c3d0dc}
+body.uwu-night-active :is(.sb-folder-browser-row,.sb-folder-dialog-footer,#status-bar-preset-list .preset-actions-col){border-color:#414752}
+@media(max-height:450px){.sb-folder-overlay{padding:10px}.sb-folder-dialog{max-height:calc(100dvh - 20px);min-height:0}}
+
+/* Keep folder creation beside Back; reserve independent space for the title. */
+#status-bar-manager-screen > .app-header{display:grid;grid-template-columns:auto minmax(0,1fr) auto;column-gap:6px;padding-left:12px;padding-right:12px}
+#status-bar-manager-screen .sb-manager-leading{display:flex;align-items:center;gap:4px;min-width:0}
+#status-bar-manager-screen > .app-header .title-container{position:static;left:auto;transform:none;min-width:0}
+#status-bar-manager-screen > .app-header .title{max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#status-bar-manager-screen .sb-manager-leading > button,#status-bar-manager-screen > .app-header .action-btn-group{flex-shrink:0}

@@ -1,0 +1,10 @@
+   [path,data]=route(q.action,q.args||{},authenticated);
+  }catch(e){return json({ok:false,message:e.message},400);}
+  try{
+   const login=['qr','qrcheck','status','likes','like'].includes(q.action),answer=await ncm(path,data,session,login);
+   return json({ok:true,result:scrub(answer.result),transport:login?'eapi':'weapi',...(login?{session:answer.session}:{})});
+  }catch(e){const message=e.name==='TimeoutError'||e.name==='AbortError'?'网易云请求超时，尚未验证成功':/^网易云/.test(e.message||'')?e.message:'接口运行或连接失败（'+String(e.code||e.name||'unknown').replace(/[^A-Za-z0-9_]/g,'').slice(0,60)+'），尚未验证成功';return json({ok:false,message},502);}
+
+ }
+};
+export default musicWorker;

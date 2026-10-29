@@ -1,0 +1,47 @@
+/* Theme corrections are scoped outside the chat screen by UwUNight.apply. */
+body.uwu-night-active {color-scheme:dark}
+body.uwu-night-active :is(.screen,.modal-window,.modal-content,.action-sheet) :is(h1,h2,h3,h4,h5,h6,label,legend,button,a,summary,dt,th),
+body.uwu-night-active :is(.title,.menu-item-label,.menu-icon-wrapper,.profile-name,.more-profile-name,.current-date-display,.chat-name,.chat-name-text,.preset-name,.preset-card-name,.setting-label,.kkt-item-title){color:#e2e4e9!important}
+body.uwu-night-active :is(.screen,.modal-window,.modal-content) :is([class*="subtitle"],[class*="description"],.hint,.placeholder-text,.profile-status,.chat-preview,.chat-time,.kkt-item-subtitle){color:#aeb3bd!important}
+body.uwu-night-active :is(.more-profile-name,.current-date-display){text-shadow:none!important}
+body.uwu-night-active :is(.chat-category-tabs,.bottom-nav,.search-bar-decoration,.preset-card,.preset-desc,.preset-select-container,.code-input,.preview-result-box,.status-tag,.preset-action-btn,.chat-folder-manage-btn,.profile-item,.contact-group,.editor-section,.search-container,.search-box,.search-input-wrapper,.glass-background-layer,.quote-symbol,.avatar-wrapper){background-color:#292b32!important;border-color:#41444e!important;color:#dce0e8!important}
+body.uwu-night-active .glass-background-layer{background-image:none!important}
+body.uwu-night-active :is(.menu-grid,.section-divider,.footer-divider){border-color:#41444e!important}
+body.uwu-night-active .glass-background-layer::after{background:#292b32!important}
+body.uwu-night-active .bottom-nav{background:#202126!important;border-color:#41444e!important}
+body.uwu-night-active .bottom-nav .nav-item{color:#aeb3bd!important}
+body.uwu-night-active .bottom-nav .nav-item.active{color:#f0f2f7!important}
+body.uwu-night-active :is(.screen,.modal-window) svg{color:inherit}
+body.uwu-night-active :is(.menu-icon-wrapper,.action-btn,.back-btn,.icon-btn-simple,.search-bar-decoration) svg{stroke:#e2e4e9!important}
+body.uwu-night-active :is(.tab-item,.tab-item.pill-white,.tab-item.pill-gray){background:#292b32!important;border-color:#41444e!important;color:#dce0e8!important}
+body.uwu-night-active .tab-item.active{background:#dce0e8!important;border-color:#dce0e8!important;color:#202126!important}
+body.uwu-night-active .tab-item.active svg{stroke:currentColor!important}
+body.uwu-night-active :is(input,textarea)::placeholder{color:#aeb3bd!important;opacity:1}
+body.uwu-night-active :is(.screen,.modal-window) :is(.btn-primary,.save-btn,.confirm-btn){background:#434b5d!important;color:#f2f4f8!important}
+/* The music iframe occupies the whole screen; navigation lives inside its pages. */
+#uwu-music-frame{height:100%;display:block}
+/* Invitation cards share the renderer's message-info/message-bubble-row structure. */
+.uwu-listen-card{position:relative;flex:0 1 246px;max-width:calc(100% - 16px);margin:0 8px;min-width:0}
+.uwu-listen-card small{white-space:normal}
+.uwu-listen-card>.message-time{position:absolute;bottom:0;white-space:nowrap;display:none;line-height:1;font-size:10px;color:#aaa;pointer-events:none}
+#chat-room-screen.show-timestamp .uwu-listen-card>.message-time{display:block}
+.message-wrapper.sent .uwu-listen-card>.message-time{right:100%;margin-right:6px}
+.message-wrapper.received .uwu-listen-card>.message-time{left:100%;margin-left:6px}
+body.uwu-night-active .phone-screen{background-color:#202126!important}
+body.uwu-night-active :is(.screen,.modal-window,.modal-content) :is([class$="-name"],[class$="-label"],[class$="-title"],.kkt-item-label,.cot-item-name,.item-name){color:#e2e4e9!important}
+body.uwu-night-active :is(.settings-tabs,.cot-items-container,.cot-item-card,.cot-readonly-textarea,.cot-lock-notice,.cot-help-btn,.cot-icon-btn,.cot-preset-sort-btn,.xml-tag-item code,.world-book-new-menu,.wb-icon-wrapper,.wb-selector-row,.wb-selector-checkbox,.wb-selector-tools,.wb-preset-name,.list-view,.journal-card,.journal-drawer-button,.journal-drawer,.v18-glass-dialog,.vm-card,.vm-pill,.vm-search,.vm-tag,.vm-mode-setting,.vm-mode-selector,.vm-dialog button,.vm-count-badge,.vm-review-button,.vm-timeline){background:#292b32!important;border-color:#41444e!important;color:#dce0e8!important}
+body.uwu-night-active :is(.screen,.modal-window) :is([style*="background: rgb(255, 255, 255)" i],[style*="background-color: rgb(255, 255, 255)" i],[style*="background: #f8f9fa" i],[style*="background: #f9f9f9" i]){background:#292b32!important;color:#dce0e8!important}
+body.uwu-night-active :is(.screen,.modal-window) :is([style*="color: #333" i],[style*="color: #222" i],[style*="color: #000" i],[style*="color: #666" i]){color:#dce0e8!important}
+body.uwu-night-active :is(.cot-item-card.locked,.settings-tab.active,.vm-tag.active,.vm-mode-selector button.selected){background:#434b5d!important;color:#f2f4f8!important}
+body.uwu-night-active :is(.chat-avatar,.profile-avatar){background-color:#292b32!important}
+body.uwu-night-active .guide-tooltip{background:#292b32!important;color:#e2e4e9!important;border-color:#41444e!important}
+body.uwu-night-active .guide-tooltip.bottom::after{border-bottom-color:#292b32!important}
+body.uwu-night-active .guide-tooltip.top::after{border-top-color:#292b32!important}
+body.uwu-night-active .guide-tooltip button{background:#434b5d!important;color:#f2f4f8!important}
+body.uwu-night-active #chat-list-container .item-name{color:#e2e4e9!important}
+body.uwu-night-active :is(.storage-total-value,.search-filter-bar span,.search-option-toggle span,.screen [style*="color:#666" i],.screen [style*="color:#333" i]){color:#dce0e8!important}
+body.uwu-night-active :is(.storage-bar-container,.ios6-grouped-card,.mp-info-container,.community-search-input-container,.search-filter-bar,.search-content,.scope-modal-content,.scope-list,.search-result-item){background-color:#292b32!important;border-color:#41444e!important;color:#dce0e8!important}
+#music-screen{animation:none}
+
+/* Parent safe-area is forwarded into the music iframe, whose env() may be zero. */
+:root{--uwu-system-safe-top:env(safe-area-inset-top,0px);--uwu-top-inset:env(safe-area-inset-top,0px)}

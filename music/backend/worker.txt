@@ -1,0 +1,144 @@
+/*
+Third-party MIT notice (API reference)
+The MIT License (MIT)
+
+Copyright (c) 2013-2022 Binaryify
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+*/
+// Experimental private adapter, endpoint conventions based on NeteaseCloudMusicApiEnhanced (MIT).
+import {createCipheriv,createHash,createHmac,timingSafeEqual,publicEncrypt,constants,randomBytes} from 'node:crypto';
+import {Buffer} from 'node:buffer';
+const PUBLIC_KEY='-----BEGIN PUBLIC KEY-----\nMIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDgtQn2JZ34ZC28NWYpAUd98iZ37BUrX/aKzmFbt7clFSs6sXqHauqKWqdtLkF2KexO40H1YTX8z2lSgBBOAxLsvaklV8k4cBFK9snQXE9/DDaFt6Rr7iVZMldczhC0JNgTz+SHXT6CBHuX3e9SdB1Ua44oncaTWz7OBGLbCiK45wIDAQAB\n-----END PUBLIC KEY-----';
+function aes(text,key){const c=createCipheriv('aes-128-cbc',Buffer.from(key),Buffer.from('0102030405060708'));return Buffer.concat([c.update(text,'utf8'),c.final()]).toString('base64');}
+function encrypt(data){const secret=randomBytes(8).toString('hex'),rev=Buffer.from([...secret].reverse().join(''));return {params:aes(aes(JSON.stringify(data),'0CoJUm6Qyw8W8jud'),secret),encSecKey:publicEncrypt({key:PUBLIC_KEY,padding:constants.RSA_NO_PADDING},Buffer.concat([Buffer.alloc(128-rev.length),rev])).toString('hex')};}
+function json(value,status=200){return Response.json(value,{status,headers:{'Cache-Control':'no-store','Referrer-Policy':'no-referrer'}});}
+function cleanSession(value){return String(value||'').split(';').map(s=>s.trim()).filter(s=>/^(MUSIC_U|MUSIC_A|__csrf|NMTID|__remember_me|deviceId)=[A-Za-z0-9_%+/.=\-]*$/.test(s)).join('; ');}
+function id(value){if(!/^\d{1,25}$/.test(String(value||'')))throw new Error('请填写有效的数字ID');return String(value);}
+function scrub(value){if(Array.isArray(value))return value.map(scrub);if(value&&typeof value==='object')return Object.fromEntries(Object.entries(value).filter(([k])=>!/(cookie|token|music_u|csrf|password)/i.test(k)).map(([k,v])=>[k,scrub(v)]));return value;}
+
+function eapi(path,data){
+ const text=JSON.stringify(data),digest=createHash('md5').update('nobody'+path+'use'+text+'md5forencrypt').digest('hex');
+ const cipher=createCipheriv('aes-128-ecb',Buffer.from('e82ckenh8dichen8'),Buffer.alloc(0));
+ return {params:Buffer.concat([cipher.update(path+'-36cd479b6b5-'+text+'-36cd479b6b5-'+digest,'utf8'),cipher.final()]).toString('hex').toUpperCase()};
+}
+function mergeSession(session,headers){
+ const values=typeof headers.getSetCookie==='function'?headers.getSetCookie():[headers.get('Set-Cookie')||''];
+ const pairs=values.flatMap(v=>v.split(/,(?=\s*[^\s;,]+=)/)).map(v=>v.split(';')[0]);
+ const merged={};for(const p of [...session.split(';'),...pairs]){const at=p.indexOf('=');if(at>0)merged[p.slice(0,at).trim()]=p.slice(at+1).trim();}
+ return cleanSession(Object.entries(merged).map(([k,v])=>k+'='+v).join('; '));
+}
+function upstream(path,data,session,login){
+ const csrf=/__csrf=([^;]*)/.exec(session)?.[1]||'';
+ if(!login)return {url:'https://music.163.com/weapi/'+path.slice(5),cookie:session||'os=pc',payload:encrypt({...data,csrf_token:csrf,e_r:false}),session};
+ const device=/deviceId=([^;]*)/.exec(session)?.[1]||randomBytes(16).toString('hex');
+ session=cleanSession(session+'; deviceId='+device);
+ const header={os:'pc',osver:'Microsoft-Windows-10-Professional-build-19045-64bit',appver:'3.1.17.204416',deviceId:device,__csrf:csrf,requestId:Date.now()+'_'+randomBytes(2).readUInt16BE(0)};
+ for(const name of ['MUSIC_U','MUSIC_A','NMTID']){const pair=session.split('; ').find(x=>x.startsWith(name+'='));if(pair)header[name]=pair.slice(name.length+1);}
+ return {url:'https://interfacepc.music.163.com/eapi/'+path.slice(5),cookie:Object.entries(header).map(([k,v])=>k+'='+encodeURIComponent(v)).join('; '),payload:eapi(path,{...data,e_r:false,header}),session};
+}
+
+function spaceId(value){const s=String(value||'default');if(!/^[A-Za-z0-9_-]{1,64}$/.test(s))throw new Error('一起听对象编号无效');return s;}
+function targetProof(pid,uid,session,secret,origin,space,actor,permissions){
+ const body=Buffer.from(JSON.stringify({pid:id(pid),uid:id(uid),space:spaceId(space),actor:actor==='char'?'char':'self',permissions:{add:permissions?.add===true,remove:permissions?.remove===true},expires:Date.now()+120000,owner:createHash('sha256').update(session.split('; ').find(x=>x.startsWith('MUSIC_U='))||'').digest('hex'),origin})).toString('base64url');
+ return body+'.'+createHmac('sha256',secret).update(body).digest('base64url');
+}
+function readTarget(proof,session,secret,origin,space,actor,operation){
+ try{const [body,signature,...rest]=String(proof||'').split('.');if(rest.length||!body||!signature||body.length>1000)throw 0;
+ const expected=createHmac('sha256',secret).update(body).digest(),given=Buffer.from(signature,'base64url');if(given.length!==expected.length||!timingSafeEqual(given,expected))throw 0;
+ const t=JSON.parse(Buffer.from(body,'base64url').toString());if(t.actor!==(actor==='char'?'char':'self')||!Number.isFinite(t.expires)||Date.now()>t.expires||t.actor==='char'&&t.permissions?.[operation]!==true||t.space!==spaceId(space)||t.origin!==origin||t.owner!==createHash('sha256').update(session.split('; ').find(x=>x.startsWith('MUSIC_U='))||'').digest('hex'))throw 0;
+ return {pid:id(t.pid),uid:id(t.uid)};}catch{throw new Error('歌单授权失效或不属于当前一起听对象，请重新确认；不会自动换歌单');}
+}
+async function ncm(path,data,session,login=false){
+ const info=upstream(path,data,session,login);
+ const r=await fetch(info.url,{method:'POST',redirect:'manual',signal:AbortSignal.timeout(20000),headers:{'Content-Type':'application/x-www-form-urlencoded','Referer':'https://music.163.com/','User-Agent':login?'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Safari/537.36 Chrome/91.0.4472.164 NeteaseMusicDesktop/3.1.29.205117':'Mozilla/5.0','Cookie':info.cookie},body:new URLSearchParams(info.payload).toString()});
+ if(!r.ok)throw new Error('网易云HTTP '+r.status+'；请求未成功');
+ let result;try{result=await r.json();}catch{throw new Error('网易云未返回JSON，可能是访问限制');}
+ return {result,session:mergeSession(info.session,r.headers)};
+}
+function route(action,args,authenticated){
+ if(action==='qr')return ['/api/login/qrcode/unikey',{type:3}];
+ if(action==='qrcheck'){if(!/^[\w-]{1,256}$/.test(String(args.qrkey||'')))throw new Error('二维码key无效');return ['/api/login/qrcode/client/login',{key:args.qrkey,type:3}];}
+ if(action==='search'){const s=String(args.keyword||'').trim();if(!s||s.length>100)throw new Error('搜索词请填写1至100个字符');return ['/api/cloudsearch/pc',{s,type:1,limit:50,offset:0,total:true}];}
+ if(action==='play')return ['/api/song/enhance/player/url/v1',{ids:JSON.stringify([id(args.id)]),level:'standard',encodeType:'mp3'}];
+ if(action==='lyric')return ['/api/song/lyric',{id:id(args.id),tv:-1,lv:-1,rv:-1,kv:-1,_nmclfl:1}];
+ if(!authenticated)throw new Error('请先扫码登录');
+ if(action==='status')return ['/api/w/nuser/account/get',{}];
+ if(action==='recommendLists')return ['/api/v1/discovery/recommend/resource',{}];
+ if(action==='likes')return ['/api/song/like/get',{uid:id(args.uid)}];
+ if(action==='like'){if(typeof args.like!=='boolean')throw new Error('喜欢状态无效');return ['/api/song/like',{trackId:id(args.id),userid:id(args.uid),like:args.like}];}
+ if(action==='recommend')return ['/api/v3/discovery/recommend/songs',{}];
+ if(action==='playlists'){const offset=Number(args.offset||0);if(!Number.isSafeInteger(offset)||offset<0)throw new Error('歌单分页无效');return ['/api/user/playlist',{uid:id(args.uid),limit:100,offset,includeVideo:true}];}
+ if(action==='details'){if(!Array.isArray(args.ids)||!args.ids.length||args.ids.length>100)throw new Error('每批曲目需为1至100首');return ['/api/v3/song/detail',{c:JSON.stringify(args.ids.map(v=>({id:id(v)})))}];}
+ if(action==='playlist')return ['/api/v6/playlist/detail',{id:id(args.id),n:100,s:0}];
+ if(action==='create'){const name=String(args.name||'').trim();if(!name||name.length>80||/[\x00-\x1f]/.test(name))throw new Error('歌单名称需为1至80字');return ['/api/playlist/create',{name,privacy:10,type:'NORMAL'}];}
+ if(action==='add'||action==='remove')return ['/api/playlist/manipulate/tracks',{op:action==='remove'?'del':'add',pid:id(args.pid),trackIds:JSON.stringify([id(args.id)]),imme:'true'}];
+ throw new Error('不支持的测试动作');
+}
+const musicWorker = {
+ async fetch(request,env){
+  const own=new URL(request.url).origin,origin=request.headers.get('Origin');
+  const allowed=new Set([own,...String(env.ALLOWED_ORIGINS||'').split(',').map(x=>x.trim()).filter(Boolean)]);
+  if(origin&&!allowed.has(origin))return json({ok:false,message:'此 UwU 地址尚未获准连接，请在音乐 Worker 的 ALLOWED_ORIGINS 中添加完整网站来源地址'},403);
+  const cors={};if(origin){cors['Access-Control-Allow-Origin']=origin;cors['Vary']='Origin';}
+  cors['Access-Control-Allow-Methods']='GET, POST, OPTIONS';cors['Access-Control-Allow-Headers']='Content-Type';cors['Access-Control-Max-Age']='600';
+  if(request.method==='OPTIONS')return new Response(null,{status:204,headers:cors});
+  const answer=await musicWorker.handle(request,env),headers=new Headers(answer.headers);for(const[k,v]of Object.entries(cors))headers.set(k,v);
+  return new Response(answer.body,{status:answer.status,statusText:answer.statusText,headers});
+ },
+ async handle(request,env){
+  const u=new URL(request.url);
+  if(u.pathname==='/'&&request.method==='GET')return json({ok:true,service:'uwu-music-api',version:'0.7.2',message:'音乐接口已运行，请从 UwU 的 <3 入口打开音乐页面'});
+  if(u.pathname==='/health'&&request.method==='GET'){encrypt({test:true});eapi('/api/test',{test:true});return json({ok:true,service:'uwu-music-api',version:'0.7.2',note:'运行环境正常，未检查网易云连接'});}
+  if(u.pathname!=='/api'||request.method!=='POST')return json({ok:false,message:'接口不存在'},404);
+  if(!env.TEST_KEY||env.TEST_KEY.length<16)return json({ok:false,message:'请先设置至少16位的TEST_KEY'},503);
+  // Allowed origins are checked by fetch before dispatch.
+  if(!/^application\/json(?:;|$)/i.test(request.headers.get('Content-Type')||''))return json({ok:false,message:'只接受JSON请求'},415);
+  let q;try{if(Number(request.headers.get('Content-Length'))>20000)throw new Error();const raw=await request.text();if(raw.length>20000)throw new Error();q=JSON.parse(raw);}catch{return json({ok:false,message:'请求格式错误或太长'},400);}
+  if(q?.key!==env.TEST_KEY)return json({ok:false,message:'测试口令不正确'},401);
+  let path,data,session=cleanSession(q.session);
+  try{
+   const authenticated=/(?:^|; )MUSIC_U=.+/.test(session);
+   if(q.action==='bind'){
+    if(!authenticated)throw new Error('请先扫码登录');
+    const account=await ncm('/api/w/nuser/account/get',{},session,true);
+    if(account.result.code!==200)return json({ok:true,result:scrub(account.result)});
+    const uid=id(account.result.profile?.userId||account.result.account?.id);
+    const playlist=await ncm('/api/v6/playlist/detail',{id:id(q.args?.pid),n:1,s:0},account.session);
+    if(playlist.result.code!==200)return json({ok:true,result:scrub(playlist.result)});
+    const item=playlist.result.playlist;
+    if(String(item?.creator?.userId||item?.userId)!==uid)throw new Error('只能关联你自己创建的歌单');
+    return json({ok:true,result:{code:200,pid:id(item.id),uid,name:String(item.name||'一起听歌单')},target:targetProof(item.id,uid,playlist.session,env.TEST_KEY,u.origin,spaceId(q.args?.space),q.args?.actor,q.args?.permissions),session:playlist.session});
+   }
+   if(q.action==='add'||q.action==='remove'){
+    const target=readTarget(q.args?.target,session,env.TEST_KEY,u.origin,spaceId(q.args?.space),q.args?.actor,q.action);
+    q.args={id:q.args?.id,pid:target.pid};
+   }
+   if(q.action==='like'){if(!authenticated)throw new Error('请先扫码登录');if(typeof q.args?.like!=='boolean')throw new Error('喜欢状态无效');const account=await ncm('/api/w/nuser/account/get',{},session,true);if(account.result.code!==200)return json({ok:true,result:scrub(account.result)});session=account.session;q.args={id:q.args.id,like:q.args.like,uid:id(account.result.profile?.userId||account.result.account?.id)};}
+   [path,data]=route(q.action,q.args||{},authenticated);
+  }catch(e){return json({ok:false,message:e.message},400);}
+  try{
+   const login=['qr','qrcheck','status','likes','like'].includes(q.action),answer=await ncm(path,data,session,login);
+   return json({ok:true,result:scrub(answer.result),transport:login?'eapi':'weapi',...(login?{session:answer.session}:{})});
+  }catch(e){const message=e.name==='TimeoutError'||e.name==='AbortError'?'网易云请求超时，尚未验证成功':/^网易云/.test(e.message||'')?e.message:'接口运行或连接失败（'+String(e.code||e.name||'unknown').replace(/[^A-Za-z0-9_]/g,'').slice(0,60)+'），尚未验证成功';return json({ok:false,message},502);}
+
+ }
+};
+export default musicWorker;

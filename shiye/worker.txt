@@ -1,0 +1,95 @@
+const CORS={'Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'POST, OPTIONS','Access-Control-Allow-Headers':'Content-Type','Access-Control-Max-Age':'600'};
+const SELECTORS = ['#detail-title', '#detail-desc', '.author-container .username', '.note-slider-img img'];
+function json(data, status = 200) {
+return new Response(JSON.stringify(data, null, 2), {
+status, headers: {...CORS,'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'}
+});
+}
+function extractUrl(input) {
+if (typeof input !== 'string' || input.length > 12000) throw new Error('请粘贴小红书链接或分享文字。');
+const candidates = input.match(/https:\/\/[^\s<>"“”]+/g) || [];
+for (const item of candidates) {
+let u;
+try { u = new URL(item.replace(/[，。；！）)]+$/g, '')); } catch { continue; }
+if (u.username || u.password || (u.port && u.port !== '443')) continue;
+const short = ['xhslink.cn','xhslink.com'].includes(u.hostname);
+const note = ['www.xiaohongshu.com','xiaohongshu.com'].includes(u.hostname)
+&& /^\/(explore|discovery\/item)\/[a-f\d]{24}(?:\/|$)/i.test(u.pathname);
+if (short || note) { u.hash = ''; return u.href; }
+}
+throw new Error('没有找到支持的小红书分享链接。');
+}
+function unpack(payload) {
+if (payload?.success === false) throw new Error('浏览器服务返回失败。');
+const rows = Array.isArray(payload) ? payload : payload?.result;
+if (!Array.isArray(rows)) throw new Error('浏览器返回结构与预期不同，请把错误结果发回。');
+const matches = selector => rows.find(r=>r.selector===selector)?.results || [];
+const text = selector => matches(selector).map(r=>String(r.text || '').trim()).filter(Boolean).join('\n');
+const title = text(SELECTORS[0]);
+const body = text(SELECTORS[1]);
+const images = [...new Set(matches(SELECTORS[3]).map(r=>{
+const attrs = r.attributes || [];
+const get = name => attrs.find(a=>a.name===name)?.value;
+return get('src') || get('data-src');
+}).filter(src=>{
+if (!src) return false;
+try { const u = new URL(src); return u.protocol==='https:' && (u.hostname.endsWith('.xhscdn.com') || u.hostname.endsWith('.xiaohongshu.com')); }
+catch { return false; }
+}))];
+if (!body && !images.length) return {ok:false, message:'没有提取到正文或配图。可能只加载了登录页、受限页面，或页面结构发生变化；本次不算成功。',title,body,images};
+return {ok:true,title,body,author:text(SELECTORS[2]),images,image_count:images.length,
+message:'已提取帖子内容。图片是页面提供的地址，尚未进行文字识别；不保证列出了所有配图。'};
+}
+export default {
+async fetch(request, env) {
+const path = new URL(request.url).pathname;
+if(request.method==='OPTIONS' && ['/parse','/check','/image'].includes(path)) return new Response(null,{status:204,headers:CORS});
+if (path==='/' && request.method==='GET') return new Response(PAGE, {
+headers:{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store',
+'Content-Security-Policy':"default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
+'X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer'}
+});
+if (!['/parse','/check','/image'].includes(path) || request.method!=='POST') return json({ok:false,message:'没有这个接口。'},404);
+if (!env.TEST_KEY || env.TEST_KEY.length<16) return json({ok:false,message:'请先在 Worker Secrets 中设置至少16位的 TEST_KEY。'},503);
+if (Number(request.headers.get('Content-Length'))>20000) return json({ok:false,message:'输入太长。'},413);
+let input;
+try { const raw=await request.text(); if(raw.length>20000) throw new Error(); input=JSON.parse(raw); }
+catch { return json({ok:false,message:'请求内容格式不正确。'},400); }
+if (!input || typeof input!=='object' || input.key!==env.TEST_KEY) return json({ok:false,message:'测试口令不正确。'},401);
+if (!env.BROWSER || typeof env.BROWSER.quickAction!=='function')
+return json({ok:false,message:'还没有可用的 BROWSER 浏览器绑定，或兼容日期太旧。请按文件开头说明设置。'},503);
+if(path==='/check') return json({ok:true,service:'shiye',version:'0.3',browser_configured:true,features:['parse','image'],message:'连接成功；尚未检查浏览器剩余额度及帖子可读性。'});
+if(path==='/image') {
+try {
+const u=new URL(input.url);
+if(u.protocol!=='https:' || u.username || u.password || u.port || !/^sns-webpic-[a-z0-9-]+\.xhscdn\.com$/i.test(u.hostname)) return json({ok:false,message:'只允许读取小红书帖子配图。'},400);
+const r=await fetch(u.href,{redirect:'manual',signal:AbortSignal.timeout(20000)});
+const mime=(r.headers.get('Content-Type')||'').split(';')[0];
+if(!r.ok || !['image/jpeg','image/png','image/webp','image/gif'].includes(mime)) {await r.body?.cancel();return json({ok:false,message:'图片读取失败或链接已过期。'},502);}
+const reader=r.body.getReader(),chunks=[];let size=0;
+try {while(true){const {done,value}=await reader.read();if(done)break;size+=value.length;if(size>6*1024*1024)throw new Error();chunks.push(value);}}
+finally {await reader.cancel().catch(()=>{});}
+let binary='';for(const chunk of chunks)for(let i=0;i<chunk.length;i+=8192)binary+=String.fromCharCode(...chunk.subarray(i,i+8192));
+return json({ok:true,mime,data:btoa(binary)});
+} catch {return json({ok:false,message:'图片下载失败、超时或超过6MB。'},502);}
+}
+let url;
+try { url=extractUrl(input.text); } catch(e) { return json({ok:false,message:e.message},400); }
+try {
+const response=await env.BROWSER.quickAction('scrape',{
+url, elements:SELECTORS.map(selector=>({selector})),
+gotoOptions:{waitUntil:'networkidle2',timeout:45000}
+});
+if (!response.ok) return json({ok:false,upstream_status:response.status,
+message:response.status===429 ? '浏览器额度或频率达到限制。先查看 CF 用量，不要连续重试。' : 'CF 浏览器请求失败；请把此状态码发回。'},502);
+const result=unpack(await response.json());
+return json(result);
+} catch {
+return json({ok:false,message:'浏览器加载超时、请求失败或返回格式异常。尚未读取成功；请把此结果发回。'},502);
+}
+}
+};
+const PAGE = `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>拾页</title><style>body{font:16px system-ui;padding:20px}pre{white-space:pre-wrap;overflow-wrap:anywhere}</style><h2>拾页 · 链接读取</h2><p>正文与配图地址测试；图片识别在 UwU 中使用自己的 API。</p><input id="key" type="password" placeholder="测试口令" autocomplete="off"><textarea id="text" placeholder="粘贴你要测试的小红书分享链接"></textarea><button id="check">测试连接（不读取帖子）</button><button id="go">读取帖子</button><pre id="out"></pre><div id="imgs"></div><script>
+async function run(path){const go=document.getElementById('go'),check=document.getElementById('check'),out=document.getElementById('out'),imgs=document.getElementById('imgs');go.disabled=check.disabled=true;imgs.replaceChildren();out.textContent='正在处理，请勿重复点击…';try{const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:document.getElementById('key').value,text:document.getElementById('text').value})});const d=await r.json();out.textContent=JSON.stringify(d,null,2);for(const [i,src]of(d.images||[]).entries()){const a=document.createElement('a');a.href=src;a.textContent='打开配图 '+(i+1);a.target='_blank';a.rel='noopener noreferrer';imgs.append(a);}}catch{out.textContent='请求失败，请检查网络。';}finally{go.disabled=check.disabled=false;}}
+document.getElementById('go').onclick=()=>run('/parse');document.getElementById('check').onclick=()=>run('/check');
+</script></html>`;

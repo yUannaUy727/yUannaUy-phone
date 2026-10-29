@@ -1,0 +1,8 @@
+// Character greetings and user-written journals; neither path requests a model.
+(() => {
+'use strict';
+const E=(tag,text,cls)=>{const e=document.createElement(tag);if(text!==undefined)e.textContent=text;if(cls)e.className=cls;return e;};
+const B=(text,fn)=>{const b=E('button',text,'ss-button');b.type='button';b.onclick=()=>{if(b.disabled)return;b.disabled=true;return Promise.resolve().then(fn).catch(e=>showToast(e.message)).finally(()=>b.disabled=false);};return b;};
+function addJournal(chat){const archive=chat.activeArchiveId||null,shade=E('div',undefined,'ss-shade'),box=E('section',undefined,'ss-sheet');box.setAttribute('role','dialog');box.setAttribute('aria-modal','true');const head=E('header',undefined,'ss-sheet-head');head.append(E('strong','手动添加总结'),B('×',()=>shade.remove()));box.append(head);function field(label,multi=false){const row=E('label',undefined,'ss-field');row.append(E('span',label));const input=E(multi?'textarea':'input');if(multi)input.rows=12;row.append(input);box.append(row);return input;}const title=field('标题'),content=field('总结内容',true),row=E('label',undefined,'ss-toggle'),favorite=E('input');favorite.type='checkbox';row.append(E('span','同时收藏'),favorite);box.append(row,E('p','手动补充，不关联聊天范围。收藏后按当前记忆设置使用。','ss-hint'),B('保存',async()=>{if((chat.activeArchiveId||null)!==archive)throw Error('存档已切换，请重新打开');await JournalAutomation.addWritten(chat,title.value,content.value,favorite.checked);shade.remove();if(typeof renderJournalList==='function')renderJournalList();showToast('总结已添加');}));shade.append(box);shade.onclick=e=>{if(e.target===shade)shade.remove();};document.body.append(shade);}
+window.UwUCharacterExtras={addJournal};
+})();

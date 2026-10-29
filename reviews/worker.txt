@@ -1,0 +1,72 @@
+// UwU 书影音封面查询 v0.2 · 纯接口完整版 — 无账号、无模型调用、无聊天记录上传。
+const VERSION='0.2';
+const UA='Mozilla/5.0';
+const fail=(message,status=400)=>Object.assign(new Error(message),{status});
+const json=(data,status=200)=>Response.json(data,{status,headers:{'Cache-Control':'no-store'}});
+function imageURL(value){
+ let u;try{u=new URL(value);}catch{throw fail('封面地址无效');}
+ const douban=/^img\d*\.doubanio\.com$/.test(u.hostname)&&/^\/view\/(photo|subject)\//.test(u.pathname)&&/\.(jpg|jpeg|png|webp)$/i.test(u.pathname);
+ const books=u.hostname==='covers.openlibrary.org'&&/^\/b\/(id|isbn|olid)\/[A-Za-z0-9-]+\.(jpg|jpeg|png)$/i.test(u.pathname);
+ if(u.protocol!=='https:'||u.port||u.username||u.password||u.hash||!(douban||books))throw fail('只允许已支持来源的封面图片');
+ return u;
+}
+function publicCover(value,origin){try{return origin+'/cover?url='+encodeURIComponent(imageURL(value).href);}catch{return null;}}
+async function upstream(url,referer){
+ const r=await fetch(url,{headers:{'User-Agent':UA,'Accept':'application/json,image/*;q=0.9','Referer':referer},redirect:'manual',signal:AbortSignal.timeout(10000)});
+ if(!r.ok)throw fail('上游暂不可用（'+r.status+'），请稍后重试',502);
+ return r;
+}
+async function search(type,q,origin){
+ const host=type==='movie'?'movie.douban.com':'book.douban.com';
+ let items=[],warning='';
+ try{
+  const r=await upstream('https://'+host+'/j/subject_suggest?q='+encodeURIComponent(q),'https://'+host+'/');
+  const rows=await r.json();if(!Array.isArray(rows))throw fail('上游格式变化',502);
+  items=rows.filter(x=>type!=='movie'||x.type==='movie').slice(0,8).map(x=>({id:String(x.id||''),type,title:String(x.title||''),year:String(x.year||''),author:String(x.author_name||''),source:'豆瓣',cover:publicCover(x.img||x.pic,origin)}));
+ }catch(e){warning=e.message;}
+ if(type==='book'&&!items.length){
+  try{
+   const r=await upstream('https://openlibrary.org/search.json?title='+encodeURIComponent(q)+'&limit=5&fields=key,title,author_name,first_publish_year,cover_i','https://openlibrary.org/');
+   const d=await r.json();items=(d.docs||[]).map(x=>({id:x.key,type,title:x.title,author:(x.author_name||[]).join(' / '),year:String(x.first_publish_year||''),source:'Open Library',cover:x.cover_i?publicCover('https://covers.openlibrary.org/b/id/'+x.cover_i+'-M.jpg?default=false',origin):null}));
+  }catch(e){warning+='；'+e.message;}
+ }
+ if(!items.length&&warning)throw fail(warning,502);
+ return {ok:true,type,query:q,items,notice:items.length?'请核对作品、作者或年份，避免选错同名作品。':'未找到，使用纯色封面即可。'};
+}
+export default {async fetch(request,env={},ctx){
+ const u=new URL(request.url),origin=request.headers.get('Origin');
+ const configured=String(env.ALLOWED_ORIGINS||'').split(',').map(x=>x.trim()).filter(Boolean);
+ const allowed=!origin||origin===u.origin||configured.includes(origin);
+ let r;
+ try{
+  if(!allowed)throw fail('该前端来源未授权，请设置 ALLOWED_ORIGINS',403);
+  if(request.method==='OPTIONS')r=new Response(null,{status:204});
+  else if(request.method!=='GET')throw fail('仅支持 GET 查询',405);
+  else if(u.pathname==='/health')r=json({ok:true,service:'uwu-shuyingyin-cover',version:VERSION});
+  else if(u.pathname==='/')r=json({ok:true,service:'uwu-shuyingyin-cover',version:VERSION,mode:'api-only',endpoints:['/health','/search?type=movie&q=作品名','/search?type=book&q=作品名','/cover?url=图片地址']});
+  else if(u.pathname==='/search'){
+   const type=u.searchParams.get('type'),q=(u.searchParams.get('q')||'').trim();
+   if(!['movie','book'].includes(type)||!q||q.length>100)throw fail('请选择电影或书籍，并填写100字以内的作品名');
+   const key=new Request(u.origin+'/search?type='+type+'&q='+encodeURIComponent(q));
+   r=await globalThis.caches?.default?.match(key);
+   if(!r){r=json(await search(type,q,u.origin));r.headers.set('Cache-Control','public,max-age=21600');ctx?.waitUntil(globalThis.caches?.default?.put(key,r.clone())||Promise.resolve());}
+  }else if(u.pathname==='/cover'){
+   const target=imageURL(u.searchParams.get('url'));
+   const key=new Request(u.origin+'/cover?url='+encodeURIComponent(target.href));
+   r=await globalThis.caches?.default?.match(key);
+   if(!r){
+    const ref=target.hostname==='covers.openlibrary.org'?'https://openlibrary.org/':target.pathname.includes('/photo/')?'https://movie.douban.com/':'https://book.douban.com/';
+    const p=await upstream(target.href,ref),mime=(p.headers.get('Content-Type')||'').split(';')[0];
+    if(!/^image\/(jpeg|png|webp)$/.test(mime))throw fail('上游未返回有效图片',502);
+    const reader=p.body.getReader(),chunks=[];let size=0;
+    while(true){const {done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>5*1024*1024){await reader.cancel();throw fail('封面图片过大',502);}chunks.push(value);}
+    r=new Response(new Blob(chunks,{type:mime}),{headers:{'Content-Type':mime,'Cache-Control':'public,max-age=86400','X-Content-Type-Options':'nosniff'}});
+    ctx?.waitUntil(globalThis.caches?.default?.put(key,r.clone())||Promise.resolve());
+   }
+  }else throw fail('地址不存在',404);
+ }catch(e){r=json({ok:false,message:e.name==='TimeoutError'?'查询超时，请稍后重试':e.message||'查询失败'},e.status||502);}
+ r=new Response(r.body,r);
+ r.headers.set('Referrer-Policy','no-referrer');r.headers.set('X-Content-Type-Options','nosniff');
+ if(origin&&allowed){r.headers.set('Access-Control-Allow-Origin',origin);r.headers.append('Vary','Origin');r.headers.set('Access-Control-Allow-Methods','GET, OPTIONS');r.headers.set('Access-Control-Allow-Headers','Content-Type');}
+ return r;
+}};
